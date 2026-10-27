@@ -32,7 +32,9 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isOwnerPage = path === '/' || path.startsWith('/tickets');
+  // "/" is public now: it shows the landing page when signed out and
+  // the dashboard when signed in (decided in src/app/page.tsx).
+  const isOwnerPage = path.startsWith('/tickets');
 
   if (!user && isOwnerPage) {
     const url = request.nextUrl.clone();
@@ -40,10 +42,19 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Already signed in? Skip the login form.
+  if (user && path === '/login') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
   return response;
 }
 
 export const config = {
-  // Skip static assets and the public chat API.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/chat).*)'],
+  // Skip static assets, icons, brand images and the public chat API
+  // (each would otherwise trigger a Supabase auth check).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|opengraph-image|brand/|api/chat).*)'],
 };
