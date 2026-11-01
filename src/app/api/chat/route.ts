@@ -74,14 +74,39 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error('[chat]', err);
 
-    const message = err instanceof Error ? err.message : '';
-    if (message.includes('429') || message.includes('RESOURCE_EXHAUSTED')) {
+    // Translate the failure into something the customer can act on.
+    // The full error stays in the server log above for the owner.
+    const cause = (err as { cause?: { code?: string } })?.cause?.code ?? '';
+    const message = (err instanceof Error ? err.message : '') + ' ' + cause;
+
+    if (/per day/i.test(message)) {
       return NextResponse.json(
-        { error: 'Rate limit reached. Wait a minute and try again.' },
+        { error: 'The assistant has reached today’s usage limit. Please try again tomorrow.' },
         { status: 429 },
       );
     }
+    if (/429|RESOURCE_EXHAUSTED/.test(message)) {
+      return NextResponse.json(
+        { error: 'Too many questions at once. Wait a minute and try again.' },
+        { status: 429 },
+      );
+    }
+    if (/503|504|UNAVAILABLE|DEADLINE_EXCEEDED|timeout|timed out|aborted/i.test(message)) {
+      return NextResponse.json(
+        { error: 'The AI service is busy right now. Try again in a minute.' },
+        { status: 503 },
+      );
+    }
+    if (/fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN/.test(message)) {
+      return NextResponse.json(
+        { error: 'The assistant couldn’t reach its services. Try again shortly.' },
+        { status: 502 },
+      );
+    }
 
-    return NextResponse.json({ error: 'Something went wrong.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Something went wrong while answering. Try again.' },
+      { status: 500 },
+    );
   }
 }
